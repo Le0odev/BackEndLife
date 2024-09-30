@@ -19,3 +19,6 @@ build/
 *.swp
 .vscode/
 .idea/
+
+# Ignorar credenciais
+serviceAccountKey.json
