@@ -3,17 +3,29 @@ const bodyParser = require('body-parser');
 const cors = require('cors');
 const admin = require('firebase-admin');
 const multer = require('multer');
+require('dotenv').config(); // Carrega as variáveis do .env
 
 // Inicializa o Firebase
-const serviceAccount = require('./accountService.json');
+const serviceAccount = {
+  type: 'service_account',
+  project_id: process.env.FIREBASE_PROJECT_ID,
+  private_key_id: process.env.FIREBASE_PRIVATE_KEY_ID,
+  private_key: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'), // Substitui \n por uma quebra de linha
+  client_email: process.env.FIREBASE_CLIENT_EMAIL,
+  client_id: process.env.FIREBASE_CLIENT_ID,
+  auth_uri: "https://accounts.google.com/o/oauth2/auth",
+  token_uri: "https://oauth2.googleapis.com/token",
+  auth_provider_x509_cert_url: "https://www.googleapis.com/oauth2/v1/certs",
+  client_x509_cert_url: `https://www.googleapis.com/robot/v1/metadata/x509/${process.env.FIREBASE_CLIENT_EMAIL}`,
+};
+
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
-  storageBucket: 'experiencebackend.appspot.com',
+  storageBucket: process.env.FIREBASE_STORAGE_BUCKET, // Nome do seu bucket
+  databaseURL: process.env.FIREBASE_DATABASE_URL // URL do seu Realtime Database
 });
 
-const db = admin.firestore();
-const bucket = admin.storage().bucket();
-
+const db = admin.database();
 const app = express();
 const PORT = process.env.PORT || 5000;
 
@@ -36,8 +48,8 @@ app.use(bodyParser.json());
 
 // Configurar o multer para lidar com uploads de arquivos (armazenados na memória antes de enviar para o Firebase)
 const storage = multer.memoryStorage(); // Armazena o arquivo na memória antes de enviá-lo para o Firebase
-const upload = multer({ 
-  storage, 
+const upload = multer({
+  storage,
   limits: { fileSize: 10 * 1024 * 1024 } // Limite de 10MB para o arquivo
 });
 
@@ -52,6 +64,9 @@ app.post('/upload-flyer', upload.single('file'), async (req, res) => {
     }
 
     const filePath = `flyers/${day}/${name}_${Date.now()}.png`;
+
+    // Salva o arquivo no Firebase Storage
+    const bucket = admin.storage().bucket();
     const fileUpload = bucket.file(filePath);
 
     await fileUpload.save(file.buffer, {
@@ -65,16 +80,16 @@ app.post('/upload-flyer', upload.single('file'), async (req, res) => {
       expires: '03-01-2500', // Expiração do link
     });
 
-    // Armazena a URL no Firestore
-    const flyerRef = db.collection('flyers').doc();
+    // Armazena a URL no Realtime Database
+    const flyerRef = db.ref('flyers').push(); // Cria uma nova referência
     await flyerRef.set({
       name,
       day,
       url: fileUrl[0],
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      createdAt: admin.database.ServerValue.TIMESTAMP, // Usa o timestamp do servidor
     });
 
-    res.status(201).send({ message: 'Flyer enviado com sucesso', id: flyerRef.id, url: fileUrl[0] });
+    res.status(201).send({ message: 'Flyer enviado com sucesso', id: flyerRef.key, url: fileUrl[0] });
   } catch (error) {
     console.error('Erro ao enviar o flyer:', error);
     res.status(500).send({ message: 'Erro ao enviar o flyer' });
@@ -86,11 +101,11 @@ app.get('/flyers/:day', async (req, res) => {
   const { day } = req.params;
 
   try {
-    const flyersSnapshot = await db.collection('flyers').where('day', '==', day).get();
+    const flyersSnapshot = await db.ref('flyers').orderByChild('day').equalTo(day).once('value');
     const flyers = [];
 
-    flyersSnapshot.forEach((doc) => {
-      flyers.push({ id: doc.id, ...doc.data() });
+    flyersSnapshot.forEach((childSnapshot) => {
+      flyers.push({ id: childSnapshot.key, ...childSnapshot.val() });
     });
 
     res.status(200).send(flyers);
