@@ -5,10 +5,10 @@ const admin = require('firebase-admin');
 const multer = require('multer');
 
 // Inicializa o Firebase
-const serviceAccount = require('./firebaseServiceAccountKey.json');
+const serviceAccount = require('./accountService.json');
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
-  storageBucket: 'lifeexperienceback.appspot.com',
+  storageBucket: 'experiencebackend.appspot.com',
 });
 
 const db = admin.firestore();
