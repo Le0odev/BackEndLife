@@ -50,7 +50,7 @@ app.use(bodyParser.json());
 const storage = multer.memoryStorage(); // Armazena o arquivo na memória antes de enviá-lo para o Firebase
 const upload = multer({
   storage,
-  limits: { fileSize: 10 * 1024 * 1024 } // Limite de 10MB para o arquivo
+  limits: { fileSize: 15 * 1024 * 1024 } // Limite de 10MB para o arquivo
 });
 
 // Rota para upload de flyers
@@ -114,6 +114,68 @@ app.get('/flyers/:day', async (req, res) => {
     res.status(500).send({ message: 'Erro ao buscar flyers' });
   }
 });
+
+app.post('/upload-gallery-media', upload.single('file'), async (req, res) => {
+  const { title, date } = req.body; // Adicione o título e a data
+  const file = req.file; // O arquivo enviado
+
+  try {
+    if (!file) {
+      return res.status(400).send({ message: 'Nenhum arquivo enviado' });
+    }
+
+    const filePath = `gallery/${file.originalname}_${Date.now()}`; // Define o caminho do arquivo
+    const isVideo = file.mimetype.startsWith('video'); // Verifica se é um vídeo com base no tipo MIME
+
+    // Salva o arquivo no Firebase Storage
+    const bucket = admin.storage().bucket();
+    const fileUpload = bucket.file(filePath);
+
+    await fileUpload.save(file.buffer, {
+      metadata: {
+        contentType: file.mimetype,
+      },
+    });
+
+    const fileUrl = await fileUpload.getSignedUrl({
+      action: 'read',
+      expires: '03-01-2500', // Expiração do link
+    });
+
+    // Armazena a URL e outras informações no Realtime Database
+    const mediaRef = db.ref('galleryMedia').push(); // Cria uma nova referência
+    await mediaRef.set({
+      title,  // Título do evento
+      date,   // Data do evento
+      name: file.originalname,
+      url: fileUrl[0],
+      isVideo,  // Adiciona flag para identificar se é vídeo
+      createdAt: admin.database.ServerValue.TIMESTAMP, // Usa o timestamp do servidor
+    });
+
+    res.status(201).send({ message: 'Mídia enviada com sucesso', id: mediaRef.key, url: fileUrl[0] });
+  } catch (error) {
+    console.error('Erro ao enviar a mídia:', error);
+    res.status(500).send({ message: 'Erro ao enviar a mídia' });
+  }
+});
+
+app.get('/gallery-media', async (req, res) => {
+  try {
+    const mediaSnapshot = await db.ref('galleryMedia').once('value');
+    const media = [];
+
+    mediaSnapshot.forEach((childSnapshot) => {
+      media.push({ id: childSnapshot.key, ...childSnapshot.val() });
+    });
+
+    res.status(200).send(media);
+  } catch (error) {
+    console.error('Erro ao buscar mídias:', error);
+    res.status(500).send({ message: 'Erro ao buscar mídias' });
+  }
+});
+
 
 // Iniciar o servidor
 app.listen(PORT, () => {
