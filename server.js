@@ -30,7 +30,7 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 // Configuração de CORS para permitir localhost e futuras origens de produção
-const allowedOrigins = ['http://localhost:5173', 'https://sua-app-em-producao.com'];
+const allowedOrigins = ['http://localhost:5173', 'https://sua-app-em-producao.com', 'http://10.0.0.104:5173'];
 
 app.use(cors({
   origin: function (origin, callback) {
