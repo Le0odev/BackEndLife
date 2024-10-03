@@ -53,9 +53,9 @@ const upload = multer({
   limits: { fileSize: 15 * 1024 * 1024 } // Limite de 10MB para o arquivo
 });
 
-// Rota para upload de flyers
+// Rota para upload de flyers (agora suporta tanto imagem quanto vídeo)
 app.post('/upload-flyer', upload.single('file'), async (req, res) => {
-  const { name, day } = req.body;
+  const { name, day, title } = req.body; // Inclui o campo 'title'
   const file = req.file; // O arquivo enviado
 
   try {
@@ -63,7 +63,11 @@ app.post('/upload-flyer', upload.single('file'), async (req, res) => {
       return res.status(400).send({ message: 'Nenhum arquivo enviado' });
     }
 
-    const filePath = `flyers/${day}/${name}_${Date.now()}.png`;
+    // Definir caminho do arquivo no Firebase Storage
+    const filePath = `flyers/${day}/${name}_${Date.now()}`;
+
+    // Verificar se é um vídeo ou imagem
+    const isVideo = file.mimetype.startsWith('video'); // Adicione '/' para garantir a verificação correta
 
     // Salva o arquivo no Firebase Storage
     const bucket = admin.storage().bucket();
@@ -75,17 +79,20 @@ app.post('/upload-flyer', upload.single('file'), async (req, res) => {
       },
     });
 
+    // Gera URL pública para o arquivo salvo
     const fileUrl = await fileUpload.getSignedUrl({
       action: 'read',
       expires: '03-01-2500', // Expiração do link
     });
 
-    // Armazena a URL no Realtime Database
+    // Armazena as informações no Realtime Database
     const flyerRef = db.ref('flyers').push(); // Cria uma nova referência
     await flyerRef.set({
+      title,   // Título adicionado
       name,
       day,
       url: fileUrl[0],
+      isVideo,  // Adiciona flag para identificar se é vídeo
       createdAt: admin.database.ServerValue.TIMESTAMP, // Usa o timestamp do servidor
     });
 
@@ -95,6 +102,7 @@ app.post('/upload-flyer', upload.single('file'), async (req, res) => {
     res.status(500).send({ message: 'Erro ao enviar o flyer' });
   }
 });
+
 
 // Rota para buscar flyers por dia
 app.get('/flyers/:day', async (req, res) => {
