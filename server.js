@@ -184,6 +184,47 @@ app.get('/gallery-media', async (req, res) => {
   }
 });
 
+app.post('/contato', async (req, res) => {
+  const { name, email, message, celular } = req.body;
+
+  try {
+    if (!name || !email || !message || !celular) {
+      return res.status(400).send({ message: 'Todos os campos são obrigatórios' });
+    }
+
+    // Armazena as informações de contato no Firebase Realtime Database
+    const contatoRef = db.ref('contatos').push(); // Cria uma nova referência
+    await contatoRef.set({
+      name,
+      email,
+      message,
+      celular,
+      createdAt: admin.database.ServerValue.TIMESTAMP, // Usa o timestamp do servidor
+    });
+
+    res.status(201).send({ message: 'Contato enviado com sucesso', id: contatoRef.key });
+  } catch (error) {
+    console.error('Erro ao enviar o contato:', error);
+    res.status(500).send({ message: 'Erro ao enviar o contato' });
+  }
+});
+
+// Rota para buscar todas as mensagens de contato (GET)
+app.get('/contato', async (req, res) => {
+  try {
+    const contatosSnapshot = await db.ref('contatos').once('value');
+    const contatos = [];
+
+    contatosSnapshot.forEach((childSnapshot) => {
+      contatos.push({ id: childSnapshot.key, ...childSnapshot.val() });
+    });
+
+    res.status(200).send(contatos);
+  } catch (error) {
+    console.error('Erro ao buscar contatos:', error);
+    res.status(500).send({ message: 'Erro ao buscar contatos' });
+  }
+});
 
 // Iniciar o servidor
 app.listen(PORT, () => {
